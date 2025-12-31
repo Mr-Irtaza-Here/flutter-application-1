@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'full_sheet.dart';
 import 'partial_sheet.dart';
+import 'client_sheet.dart';
 
 class SheetButton extends StatelessWidget {
   const SheetButton({super.key});
@@ -52,8 +53,9 @@ class SheetSideMenu extends StatelessWidget {
             PartialSheet.showDateRangeDialog(context);
           }),
           _buildMenuButton(context, 'Client Sheet', Icons.person_search, () {
-            // TODO: Implement Client Sheet navigation/logic
-            Navigator.pop(context);
+            Navigator.pop(context); // Close the drawer
+            debugPrint('SheetButton: Client Sheet pressed');
+            ClientSheet.showClientSelectionDialog(context);
           }),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
