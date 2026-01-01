@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 
 class AddFuelCostLogic {
-  static const String _storageKey = 'fuel_cost_value';
+  static const String _storageKey = 'fuel_cost_data';
 
   Future<void> showAddFuelCostDialog(
     BuildContext context,
@@ -18,20 +19,91 @@ class AddFuelCostLogic {
     );
   }
 
+  /// Get the current fuel cost value (returns just the value string for compatibility)
   static Future<String?> getFuelCost() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      return prefs.getString(_storageKey);
+      final String? data = prefs.getString(_storageKey);
+      
+      if (data != null) {
+        // Try to parse as JSON first (new format)
+        try {
+          final Map<String, dynamic> decoded = jsonDecode(data);
+          return decoded['value']?.toString();
+        } catch (_) {
+          // Fallback: might be old plain string format, migrate it
+          await _migrateLegacyData(prefs, data);
+          return data;
+        }
+      }
+      
+      // Check for legacy key and migrate if exists
+      final String? legacyData = prefs.getString('fuel_cost_value');
+      if (legacyData != null) {
+        await _migrateLegacyData(prefs, legacyData);
+        return legacyData;
+      }
     } catch (e) {
       debugPrint('Error loading fuel cost: $e');
     }
     return null;
   }
 
+  /// Get the full fuel cost data as JSON map (for server sync)
+  static Future<Map<String, dynamic>?> getFuelCostData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final String? data = prefs.getString(_storageKey);
+      if (data != null) {
+        return jsonDecode(data) as Map<String, dynamic>;
+      }
+    } catch (e) {
+      debugPrint('Error loading fuel cost data: $e');
+    }
+    return null;
+  }
+
+  /// Migrate legacy plain string data to new JSON format
+  static Future<void> _migrateLegacyData(SharedPreferences prefs, String legacyValue) async {
+    try {
+      final Map<String, dynamic> fuelCostData = {
+        'value': legacyValue,
+        'timestamp': DateTime.now().toIso8601String(),
+        'updatedAt': DateTime.now().toIso8601String(),
+      };
+      await prefs.setString(_storageKey, jsonEncode(fuelCostData));
+      // Remove old key if exists
+      await prefs.remove('fuel_cost_value');
+      debugPrint('Migrated legacy fuel cost data to JSON format');
+    } catch (e) {
+      debugPrint('Error migrating fuel cost data: $e');
+    }
+  }
+
+  /// Save fuel cost in JSON format
   static Future<void> _saveFuelCost(String value) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_storageKey, value);
+      
+      // Get existing data to preserve creation timestamp
+      Map<String, dynamic>? existingData;
+      final String? existingJson = prefs.getString(_storageKey);
+      if (existingJson != null) {
+        try {
+          existingData = jsonDecode(existingJson) as Map<String, dynamic>;
+        } catch (_) {
+          // Ignore parsing errors
+        }
+      }
+      
+      final Map<String, dynamic> fuelCostData = {
+        'value': value,
+        'timestamp': existingData?['timestamp'] ?? DateTime.now().toIso8601String(),
+        'updatedAt': DateTime.now().toIso8601String(),
+      };
+      
+      await prefs.setString(_storageKey, jsonEncode(fuelCostData));
+      debugPrint('Saved fuel cost: ${jsonEncode(fuelCostData)}');
     } catch (e) {
       debugPrint('Error saving fuel cost: $e');
     }
